@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>云桌面 AI Agent「桌面记忆」方案 — Composition</title>
+<!--
+  HyperFrames 0.8.41 standalone slideshow composition（浅色明亮商务风）。
+  GSAP must be loaded INSIDE the composition iframe: the composition's own
+  timeline script and the injected HyperFrames runtime both need window.gsap.
+-->
+<script src="../vendor/gsap.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f9fc;
+    --card: #ffffff;
+    --soft: #e9eff7;
+    --line: #cdd8e7;
+    --ink: #152640;
+    --ink2: #566985;
+    --acc: #1f5abe;
+    --acc-dim: rgba(31, 90, 190, 0.09);
+    --bad: #cb4e4e;
+    --good: #2b8c64;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; background: #f7f9fc; }
+  body { width: 1920px; height: 1080px; overflow: hidden; font-family: 'Noto Sans CJK SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
+
+  @font-face { font-family: 'Noto Sans CJK SC'; src: local('Noto Sans CJK SC'); }
+  @font-face { font-family: 'Noto Sans SC'; src: local('Noto Sans SC'); }
+  @font-face { font-family: 'PingFang SC'; src: local('PingFang SC'); }
+  @font-face { font-family: 'Microsoft YaHei'; src: local('Microsoft YaHei'); }
+
+  .scene-frame {
+    position: absolute; top: 0; left: 0;
+    width: 1920px; height: 1080px;
+    overflow: hidden;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .scene-frame.is-active { opacity: 1; visibility: visible; pointer-events: auto; }
+
+  .slide {
+    position: absolute; inset: 0;
+    padding: 76px 118px 122px;
+    display: flex; flex-direction: column;
+    background:
+      radial-gradient(1150px 640px at 88% -14%, rgba(31, 90, 190, 0.07), transparent 62%),
+      radial-gradient(920px 540px at -8% 114%, rgba(104, 168, 240, 0.10), transparent 60%),
+      var(--bg);
+  }
+  .eyebrow {
+    font-size: 24px; letter-spacing: 6px; color: var(--acc);
+    font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; gap: 16px;
+  }
+  .eyebrow::before { content: ""; width: 44px; height: 4px; background: var(--acc); border-radius: 2px; }
+  h2.head { font-size: 56px; line-height: 1.3; font-weight: 800; letter-spacing: 1px; color: var(--ink); }
+  h2.head em { font-style: normal; color: var(--acc); }
+  .sub { font-size: 28px; color: var(--ink2); margin-top: 14px; line-height: 1.5; }
+
+  .split { display: flex; gap: 44px; margin-top: 36px; flex: 1; min-height: 0; }
+  .split .left { flex: 1.12; display: flex; flex-direction: column; min-width: 0; }
+  .split .right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .steps { display: flex; flex-direction: column; gap: 22px; margin-top: 6px; flex: 1; min-height: 0; justify-content: center; }
+  .step { display: flex; gap: 22px; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 28px; box-shadow: 0 10px 30px rgba(21, 38, 64, 0.05); }
+  .step .no {
+    width: 50px; height: 50px; flex: none; border-radius: 50%;
+    background: var(--acc-dim); color: var(--acc); font-weight: 800; font-size: 25px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step.bad .no { background: rgba(203, 78, 78, 0.10); color: var(--bad); }
+  .step.good .no { background: rgba(43, 140, 100, 0.10); color: var(--good); }
+  .step .st { font-size: 28px; font-weight: 700; color: var(--ink); }
+  .step .st em { font-style: normal; color: var(--acc); }
+  .step .st em.bad { color: var(--bad); }
+  .step .sd { font-size: 23px; color: var(--ink2); margin-top: 8px; line-height: 1.55; }
+  .step .sd em { font-style: normal; color: var(--ink); font-weight: 700; }
+
+  .quote {
+    background: var(--soft); border-left: 5px solid var(--acc); border-radius: 0 14px 14px 0;
+    padding: 18px 26px; font-size: 24px; color: var(--ink); line-height: 1.55;
+  }
+  .quote.bad { border-left-color: var(--bad); }
+  .quote .qm { color: var(--acc); font-weight: 800; }
+  .quote.bad .qm { color: var(--bad); }
+
+  .shot {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    overflow: hidden; box-shadow: 0 20px 60px rgba(21, 38, 64, 0.08);
+    display: flex; flex-direction: column; flex: 1; min-height: 0;
+  }
+  .shot.clickable { cursor: pointer; transition: border-color .25s ease, box-shadow .25s ease; }
+  .shot.clickable:hover { border-color: var(--acc); box-shadow: 0 20px 70px rgba(31, 90, 190, 0.16); }
+  .shot .imgwrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .shot img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .shot .cap {
+    padding: 13px 24px; font-size: 21px; color: var(--ink2);
+    border-top: 1px solid var(--line); background: var(--card);
+    white-space: nowrap; overflow: hidden;
+  }
+  .shot .go {
+    padding: 13px 24px; font-size: 22px; font-weight: 700; color: var(--acc);
+    border-top: 1px solid rgba(31, 90, 190, 0.30); background: var(--acc-dim);
+    white-space: nowrap; overflow: hidden;
+  }
+
+  .valuebar {
+    margin-top: 30px; background: var(--acc-dim);
+    border: 1px solid rgba(31, 90, 190, 0.35); border-radius: 16px;
+    padding: 20px 30px; font-size: 28px; font-weight: 700; color: var(--ink);
+  }
+  .valuebar em { font-style: normal; color: var(--acc); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--card); color: var(--ink2);
+    font-size: 23px; padding: 11px 26px; border-radius: 999px; white-space: nowrap;
+  }
+  .chip b { color: var(--acc); font-weight: 800; }
+  .chip.bad { border-color: rgba(203, 78, 78, 0.45); color: var(--bad); }
+
+  .hint {
+    margin-top: 22px; font-size: 22px; color: var(--ink2);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .hint .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--acc); animation: pulse 1.6s infinite; flex: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  .cover { display: flex; gap: 56px; flex: 1; min-height: 0; }
+  .cover .ctext { flex: 1.25; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+  .cover .cimg { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .cover .cimg .imgwrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .cover .cimg img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .cover .cap { margin-top: 12px; font-size: 21px; color: var(--ink2); text-align: center; }
+  .logo { font-size: 33px; font-weight: 800; letter-spacing: 2px; display: flex; align-items: center; gap: 18px; margin-bottom: 46px; color: var(--ink2); }
+  .logo .mark {
+    width: 54px; height: 54px; border-radius: 14px; flex: none;
+    background: linear-gradient(135deg, var(--acc), #4a86d8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; color: #ffffff; font-weight: 900;
+  }
+  .cover h1 { font-size: 80px; font-weight: 900; letter-spacing: 2px; line-height: 1.26; color: var(--ink); }
+  .cover h1 span { color: var(--acc); }
+  .cover .tagline { font-size: 38px; color: var(--ink); font-weight: 700; margin-top: 32px; line-height: 1.5; }
+  .cover .tagline em { font-style: normal; color: var(--acc); }
+  .cover .badges { display: flex; gap: 18px; margin-top: 44px; flex-wrap: wrap; }
+  .badge { border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 23px; padding: 12px 24px; border-radius: 999px; }
+  .badge b { color: var(--acc); font-weight: 800; }
+  .cover .foot { margin-top: 56px; font-size: 23px; color: var(--ink2); letter-spacing: 2px; }
+
+  /* fragment elements start hidden; root timeline reveals them at hold times */
+  .frag { opacity: 0; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     JSON ISLAND — slideshow manifest (single source of truth)
+     ============================================================ -->
+<script type="application/hyperframes-slideshow+json">
+{
+  "slides": [
+    {
+      "sceneId": "p1-cover",
+      "notes": "开场：让云桌面里的 AI Agent 真正懂你。一句话点题：在 VDI 桌面启用桌面记忆，把 Agent 的上下文从对话框扩展到整个桌面。标语首尾呼应：不再抽卡、模糊指令可达成、数据属于企业。"
+    },
+    {
+      "sceneId": "p2-problems",
+      "notes": "两个典型问题（导图原文，含完整案例）。问题1：提示词很多但输出仍差——VDI 需求文档案例，Agent 回复四类缺陷；补充：企业上下文不等于个人上下文。问题2：模糊指令难达成——张三 PPT 案例，Agent 只能反问。详细案例可点右侧分支深入。",
+      "fragments": [10.4, 10.8, 11.2, 11.6],
+      "hotspots": [
+        {
+          "id": "h-cases",
+          "label": "深入：两个案例逐条对照 →",
+          "target": "case-detail",
+          "region": { "x": 35, "y": 95.2, "w": 30, "h": 4.5 }
+        }
+      ]
+    },
+    {
+      "sceneId": "p3-roots",
+      "notes": "原因分析（导图原文）：问题1的根因——Agent 不了解当前这个用户，只能抽卡猜；问题2的根因——Agent 只记得对话框里的内容，桌面里做的事情一概不了解。关键对照：企业上下文≠个人上下文。",
+      "fragments": [20.4, 20.8, 21.2]
+    },
+    {
+      "sceneId": "p4-solution",
+      "notes": "解决方案三步（导图原文）：①桌面记录——VDI 桌面启用桌面记忆，采集操作信息并记录；②形成记忆——数据可被用户的 Agent 调用，让 Agent 具备桌面中的记忆；③形成个人上下文——借助模型能力整理为用户上下文（岗位/工作边界/写作偏好），提升成功率。",
+      "fragments": [30.4, 30.8, 31.2, 31.6]
+    },
+    {
+      "sceneId": "p5-how",
+      "notes": "怎么解决上述问题（导图原文）：问题1→Agent 回答成功率提升，桌面里所有 Agent 都了解用户是谁、工作边界和写作偏好，不再抽卡；问题2→Agent 具备和你一样的桌面记忆，模糊指令也可达成任务。呼应 P2 两个案例的改造后效果。",
+      "fragments": [40.4, 40.8, 41.2, 41.6]
+    },
+    {
+      "sceneId": "p6-custom",
+      "notes": "更多自定义功能（导图原文）：支持用户对桌面记忆二次开发（使用自然语言即可），也可由管理员下发应用方式。举例：识别工作中可 AI 提效的点、生成日报/周报、生成待办事项等。",
+      "fragments": [50.4, 50.8, 51.2]
+    },
+    {
+      "sceneId": "p7-value",
+      "notes": "用户价值总结（导图原文四条，第一条是重点）：①数据属于企业——新上/更换/多 Agent 并存都即刻获得个人上下文（更换 Agent 个人上下文不丢）；②提升 Agent 成功率；③模糊指令也可达成；④更多自定义功能。收尾：让云桌面里的每一个 AI Agent 都成为懂你的数字同事。",
+      "fragments": [60.4, 60.8, 61.2, 61.6, 62.0]
+    }
+  ],
+  "slideSequences": [
+    {
+      "id": "case-detail",
+      "label": "两个案例逐条对照",
+      "slides": [
+        {
+          "sceneId": "b-cases",
+          "notes": "分支页：案例一（VDI 需求文档）与案例二（张三的 PPT）的「现在 vs 改造后」逐条对照。按上一步或 Esc 返回主线。"
+        }
+      ]
+    }
+  ]
+}
+    </script>
+
+<div data-composition-id="root" data-start="0" data-duration="80" data-width="1920" data-height="1080" style="position:relative;width:1920px;height:1080px;overflow:hidden">
+
+<!-- ============ P1 封面 ============ -->
+<div id="p1-cover" class="scene-frame" data-composition-id="p1-cover" data-start="0" data-duration="10" data-label="封面">
+  <div class="slide">
+    <div class="cover">
+      <div class="ctext">
+        <div class="logo" data-anim><div class="mark">云</div>企业级云桌面 · AI Agent 增强方案</div>
+        <h1 data-anim>让云桌面里的<br/>AI Agent 真正<span>「懂你」</span></h1>
+        <div class="tagline" data-anim>基于 <em>VDI 桌面记忆</em> 的 Agent 增强方案</div>
+        <div class="badges" data-anim>
+          <div class="badge">不再<b>「抽卡」</b></div>
+          <div class="badge">模糊指令<b>可达成</b></div>
+          <div class="badge">数据<b>属于企业</b></div>
+        </div>
+        <div class="foot" data-anim>面向企业级云桌面环境&nbsp;&nbsp;|&nbsp;&nbsp;2026</div>
+      </div>
+      <div class="cimg" data-anim>
+        <div class="imgwrap"><img src="../assets/cover.png" alt="桌面记忆概念图" /></div>
+        <div class="cap">桌面里的每一次操作，都沉淀为 Agent 可用的记忆</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ P2 两个典型问题 ============ -->
+<div id="p2-problems" class="scene-frame" data-composition-id="p2-problems" data-start="10" data-duration="10" data-label="两个典型问题">
+  <div class="slide">
+    <div class="eyebrow" data-anim>问题现象</div>
+    <h2 class="head" data-anim>提示词很多，输出仍然较差；模糊指令，<em>无法达成</em></h2>
+    <div class="split">
+      <div class="left">
+        <div class="steps">
+          <div class="step bad frag" id="p2-c1"><div class="no">1</div><div><div class="st">用户提供了很多提示词，Agent 的输出<em class="bad">效果仍然较差</em></div><div class="sd">写 VDI 需求文档：内容比较空 · 名词理解偏差 · 格式不想要 · 超出工作边界</div></div></div>
+          <div class="step bad frag" id="p2-c2"><div class="no">2</div><div><div class="st">很难通过<em class="bad">模糊指令</em>达成目标</div><div class="sd">办公桌面上发生的事情 Agent 并不知道——它只知道对话框里的事情</div></div></div>
+          <div class="step frag" id="p2-c3"><div class="no">例</div><div><div class="st">「张三发了我一个 PPT，帮我生成需求文档，按我昨天的格式来」</div><div class="sd">Agent 只能反问：昨天的文档什么格式？张三在哪里发的 PPT？</div></div></div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="shot" data-anim>
+          <div class="imgwrap"><img src="../assets/split.png" alt="对话框记忆与桌面记忆的割裂" /></div>
+          <div class="cap">Agent 和人的记忆不一致，面对模糊指令就不知怎么办</div>
+        </div>
+      </div>
+    </div>
+    <div class="valuebar frag" id="p2-c4">企业上下文已让 Agent 理解业务——但 Agent 不理解<em>「个人」</em>，依然无法高质量输出</div>
+  </div>
+</div>
+
+<!-- ============ P3 问题原因分析 ============ -->
+<div id="p3-roots" class="scene-frame" data-composition-id="p3-roots" data-start="20" data-duration="10" data-label="问题原因分析">
+  <div class="slide">
+    <div class="eyebrow" data-anim>原因分析</div>
+    <h2 class="head" data-anim>Agent 不「懂你」，只能<em>「抽卡」</em>；对话框之外，一片空白</h2>
+    <div class="split">
+      <div class="left">
+        <div class="steps">
+          <div class="step frag" id="p3-r1"><div class="no">1</div><div><div class="st">关于问题 1：Agent <em>不了解当前这个用户</em></div><div class="sd">不了解你是谁、工作边界是什么、偏好是什么——它就只能通过「抽卡」来猜你要什么</div></div></div>
+          <div class="step frag" id="p3-r2"><div class="no">2</div><div><div class="st">关于问题 2：Agent <em>只能记住对话框里的内容</em></div><div class="sd">你在对话框中和它说过的内容它记得，但你在桌面里面做的事情它都不了解</div></div></div>
+          <div class="step frag" id="p3-r3"><div class="no">≠</div><div><div class="st">企业上下文 <em>≠</em> 个人上下文</div><div class="sd">企业级知识已有方案；个人的偏好、工作边界、常用词，是缺失的一环</div></div></div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="shot" data-anim>
+          <div class="imgwrap"><img src="../assets/gacha.png" alt="抽卡比喻概念图" /></div>
+          <div class="cap">不「懂你」的 Agent，每一次输出都像抽卡</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ P4 解决方案 ============ -->
+<div id="p4-solution" class="scene-frame" data-composition-id="p4-solution" data-start="30" data-duration="10" data-label="解决方案">
+  <div class="slide">
+    <div class="eyebrow" data-anim>我们的解决方案</div>
+    <h2 class="head" data-anim>在 VDI 桌面启用<em>「桌面记忆」</em>——一套操作数据，两种增强产出</h2>
+    <div class="split">
+      <div class="left">
+        <div class="steps">
+          <div class="step frag" id="p4-s1"><div class="no">①</div><div><div class="st"><em>桌面记录</em>：采集桌面操作信息并记录</div><div class="sd">在 VDI 桌面中启用桌面记忆，即可采集用户在桌面中的操作信息，并记录下来</div></div></div>
+          <div class="step frag" id="p4-s2"><div class="no">②</div><div><div class="st"><em>形成记忆</em>：让 Agent 具备桌面中的「记忆」</div><div class="sd">这些数据一方面可以被用户的 Agent 调用——Agent 具备了和你一样的桌面记忆</div></div></div>
+          <div class="step frag" id="p4-s3"><div class="no">③</div><div><div class="st"><em>形成个人上下文</em>：整理为用户上下文</div><div class="sd">借助模型的能力整理为用户上下文，提升 Agent 成功率：岗位、工作边界、写作偏好</div></div></div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="shot" data-anim>
+          <div class="imgwrap"><img src="../assets/flow3.png" alt="三步流程图" /></div>
+          <div class="cap">桌面记录 → 形成记忆 → 形成个人上下文</div>
+        </div>
+      </div>
+    </div>
+    <div class="valuebar frag" id="p4-bar">用户照常办公 · 记忆安静记录 · Agent 输出<em>贴合你的岗位与习惯</em></div>
+  </div>
+</div>
+
+<!-- ============ P5 如何解决上述问题 ============ -->
+<div id="p5-how" class="scene-frame" data-composition-id="p5-how" data-start="40" data-duration="10" data-label="如何解决">
+  <div class="slide">
+    <div class="eyebrow" data-anim>如何解决上述问题</div>
+    <h2 class="head" data-anim>两个问题，一次解决：<em>不再「抽卡」</em>，模糊指令也可达成</h2>
+    <div class="split">
+      <div class="left">
+        <div class="steps">
+          <div class="step good frag" id="p5-a1"><div class="no">1</div><div><div class="st"><em>Agent 回答成功率提升</em>（怎么解决问题 1）</div><div class="sd">桌面里的所有 Agent 都了解当前用户是谁，知道他的工作边界和写作偏好——大幅提升成功率，不再「抽卡」</div></div></div>
+          <div class="step good frag" id="p5-a2"><div class="no">2</div><div><div class="st"><em>模糊指令也可达成目标</em>（怎么解决问题 2）</div><div class="sd">Agent 具备和你一样的桌面记忆，可以通过模糊指令达成任务</div></div></div>
+          <div class="step frag" id="p5-a3"><div class="no">↺</div><div><div class="st">回到开头的两个场景</div><div class="sd">VDI 需求文档：直接对齐你的格式与边界；张三的 PPT：从桌面记忆直接定位</div></div></div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="shot" data-anim>
+          <div class="imgwrap"><img src="../assets/flow3.png" alt="方案流程" /></div>
+          <div class="cap">同一套桌面数据，持续支撑每一次 Agent 调用</div>
+        </div>
+      </div>
+    </div>
+    <div class="valuebar frag" id="p5-bar">想知道两个案例的具体变化？<em>点击下方按钮逐条对照</em></div>
+  </div>
+</div>
+
+<!-- ============ P6 更多自定义功能 ============ -->
+<div id="p6-custom" class="scene-frame" data-composition-id="p6-custom" data-start="50" data-duration="10" data-label="更多自定义功能">
+  <div class="slide">
+    <div class="eyebrow" data-anim>更多自定义功能</div>
+    <h2 class="head" data-anim>桌面记忆支持<em>二次开发</em>：自然语言即可，管理员也能统一下发</h2>
+    <div class="split">
+      <div class="right" style="flex:1">
+        <div class="shot" data-anim>
+          <div class="imgwrap"><img src="../assets/custom.png" alt="自定义功能举例" /></div>
+          <div class="cap">用户自然语言开发 + 管理员下发，两种应用方式</div>
+        </div>
+      </div>
+      <div class="left" style="flex:0.9">
+        <div class="steps">
+          <div class="step frag" id="p6-g1"><div class="no">说</div><div><div class="st">自然语言<em>二次开发</em></div><div class="sd">用户用自然语言即可基于桌面记忆开发自己的应用方式，无需专业开发</div></div></div>
+          <div class="step frag" id="p6-g2"><div class="no">管</div><div><div class="st">管理员<em>下发应用方式</em></div><div class="sd">也可由管理员统一下发应用方式，全员开箱即用</div></div></div>
+          <div class="step frag" id="p6-g3"><div class="no">例</div><div><div class="st">举例如下</div><div class="sd">识别工作过程中可以通过 AI 提效的点；帮我生成日报、周报；帮我生成待办事项等等</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ P7 用户价值总结 ============ -->
+<div id="p7-value" class="scene-frame" data-composition-id="p7-value" data-start="60" data-duration="10" data-label="用户价值总结">
+  <div class="slide">
+    <div class="eyebrow" data-anim>用户价值总结</div>
+    <h2 class="head" data-anim>四条价值：从「能用的 Agent」到<em>「懂你的数字同事」</em></h2>
+    <div class="split">
+      <div class="left" style="flex:0.95">
+        <div class="shot" data-anim>
+          <div class="imgwrap"><img src="../assets/value.png" alt="价值总结四象限" /></div>
+          <div class="cap">数据属于企业 · 成功率提升 · 模糊指令可达成 · 自定义功能</div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="steps">
+          <div class="step frag" id="p7-v1"><div class="no">1</div><div><div class="st"><em>数据属于企业</em>（重点）</div><div class="sd">企业新上的 Agent、更换 Agent、多 Agent 并存，都可以即刻获得个人上下文——更换 Agent，个人上下文不丢</div></div></div>
+          <div class="step frag" id="p7-v2"><div class="no">2</div><div><div class="st"><em>提升 Agent 的成功率</em></div><div class="sd">Agent 更懂用户是谁、用户偏好、工作边界，输出的内容符合用户的个性化要求</div></div></div>
+          <div class="step frag" id="p7-v3"><div class="no">3</div><div><div class="st"><em>模糊指令也可达成</em></div><div class="sd">拥有桌面级记忆，让 Agent 的上下文不局限于对话框，模糊指令也可达成</div></div></div>
+          <div class="step frag" id="p7-v4"><div class="no">4</div><div><div class="st"><em>更多其他自定义功能</em></div><div class="sd">识别可 AI 提效的任务、生成日报 / 周报、生成待办事项</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="valuebar frag" id="p7-bar">让云桌面里的每一个 AI Agent，都成为<em>懂你的数字同事</em></div>
+  </div>
+</div>
+
+<!-- ============ 分支页 B1：两个案例对照 ============ -->
+<div id="b-cases" class="scene-frame" data-composition-id="b-cases" data-start="70" data-duration="10" data-label="分支：两个案例对照">
+  <div class="slide">
+    <div class="eyebrow" data-anim>分支 · 两个案例逐条对照</div>
+    <h2 class="head" data-anim>同一个案例：<em>现在</em>的问题 → <em>改造后</em>的效果</h2>
+    <div class="shot" data-anim style="margin-top:34px">
+      <div class="imgwrap" style="padding:18px"><img src="../assets/cases.png" alt="案例对照图" /></div>
+      <div class="cap">案例一：VDI 需求文档 · 案例二：张三的 PPT——改造前后逐条对照</div>
+    </div>
+    <div class="hint" data-anim><span class="dot"></span>按「上一步」或 Esc 返回主线</div>
+  </div>
+</div>
+
+</div><!-- /root composition -->
+
+<!-- ============================================================
+     Timelines (scene-local seconds) — paused; engine drives seek
+     ============================================================ -->
+<script>
+(function () {
+  window.__timelines = window.__timelines || {};
+  gsap.registerPlugin();
+
+  var SCENES = [
+    { id: "p1-cover",     start: 0,  duration: 10 },
+    { id: "p2-problems",  start: 10, duration: 10 },
+    { id: "p3-roots",     start: 20, duration: 10 },
+    { id: "p4-solution",  start: 30, duration: 10 },
+    { id: "p5-how",       start: 40, duration: 10 },
+    { id: "p6-custom",    start: 50, duration: 10 },
+    { id: "p7-value",     start: 60, duration: 10 },
+    { id: "b-cases",      start: 70, duration: 10 }
+  ];
+  var TOTAL = 80;
+  window.__hfScenes = SCENES;
+  window.__hfTotalSeconds = TOTAL;
+
+  // Fragment hold-point definitions (composition-absolute seconds, match island)
+  var FRAGMENTS = {
+    "p2-problems": [
+      { t: 10.4, el: "p2-c1" },
+      { t: 10.8, el: "p2-c2" },
+      { t: 11.2, el: "p2-c3" },
+      { t: 11.6, el: "p2-c4" }
+    ],
+    "p3-roots": [
+      { t: 20.4, el: "p3-r1" },
+      { t: 20.8, el: "p3-r2" },
+      { t: 21.2, el: "p3-r3" }
+    ],
+    "p4-solution": [
+      { t: 30.4, el: "p4-s1" },
+      { t: 30.8, el: "p4-s2" },
+      { t: 31.2, el: "p4-s3" },
+      { t: 31.6, el: "p4-bar" }
+    ],
+    "p5-how": [
+      { t: 40.4, el: "p5-a1" },
+      { t: 40.8, el: "p5-a2" },
+      { t: 41.2, el: "p5-a3" },
+      { t: 41.6, el: "p5-bar" }
+    ],
+    "p6-custom": [
+      { t: 50.4, el: "p6-g1" },
+      { t: 50.8, el: "p6-g2" },
+      { t: 51.2, el: "p6-g3" }
+    ],
+    "p7-value": [
+      { t: 60.4, el: "p7-v1" },
+      { t: 60.8, el: "p7-v2" },
+      { t: 61.2, el: "p7-v3" },
+      { t: 61.6, el: "p7-v4" },
+      { t: 62.0, el: "p7-bar" }
+    ]
+  };
+
+  // Root timeline — establishes the seekable range AND encodes fragment
+  // reveals at composition-absolute seconds. Verified 0.8.41 pattern:
+  // reveal window ENDS at the hold time so seek-to-hold shows final state.
+  var root = gsap.timeline({ paused: true });
+  root.to({}, { duration: TOTAL });
+  SCENES.forEach(function (s) {
+    (FRAGMENTS[s.id] || []).forEach(function (f) {
+      var el = document.getElementById(f.el);
+      if (!el) return;
+      root.set(el, { opacity: 0, y: 26 }, 0);
+      root.to(el, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, f.t - 0.35);
+    });
+  });
+  window.__timelines["root"] = root;
+
+  // Per-scene timelines: padded to full range, no tweens — keep them real & paused.
+  SCENES.forEach(function (s) {
+    var tl = gsap.timeline({ paused: true });
+    tl.set({}, {}, s.duration);
+    window.__timelines[s.id] = tl;
+  });
+
+  // ---- Scene visibility controller (playhead-driven) ----
+  var lastActiveId = null;
+  function updateVisibility(t) {
+    for (var i = 0; i < SCENES.length; i++) {
+      var s = SCENES[i];
+      var el = document.getElementById(s.id);
+      if (!el) continue;
+      var active = t >= s.start && t < s.start + s.duration;
+      el.style.opacity = active ? "1" : "0";
+      el.style.visibility = active ? "visible" : "hidden";
+      el.style.pointerEvents = active ? "auto" : "none";
+      el.classList.toggle("is-active", active);
+      if (active && lastActiveId !== s.id) {
+        lastActiveId = s.id;
+        fireEntrance(el);
+      }
+    }
+  }
+  window.__hfSetTime = updateVisibility;
+
+  // data-anim entrance on slide activation (imperative — independent of playhead)
+  function fireEntrance(sceneEl) {
+    var animEls = sceneEl.querySelectorAll("[data-anim]");
+    if (!animEls.length) return;
+    gsap.from(animEls, {
+      opacity: 0, y: 30, duration: 0.45, stagger: 0.08,
+      ease: "power2.out", overwrite: true
+    });
+  }
+
+  updateVisibility(0);
+  root.eventCallback("onUpdate", function () {
+    updateVisibility(root.time());
+  });
+
+  // ---- Hotspot clicks: navigate via the slideshow player bridge ----
+  document.addEventListener("click", function (ev) {
+    var el = ev.target.closest("[data-hotspot]");
+    if (!el) return;
+    ev.preventDefault();
+    var seq = el.getAttribute("data-hotspot");
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: "hf-deck-hotspot", sequenceId: seq }, "*");
+      }
+    } catch (e) {}
+  });
+
+  // ---- scenes manifest postMessage (standalone harness contract) ----
+  function postTimeline() {
+    try {
+      parent.postMessage({
+        source: "hf-preview",
+        type: "timeline",
+        durationInFrames: TOTAL * 30,
+        scenes: SCENES.map(function (s) {
+          return { id: s.id, start: s.start, duration: s.duration };
+        })
+      }, "*");
+    } catch (e) {}
+  }
+  if (document.readyState === "complete") {
+    setTimeout(postTimeline, 300);
+  } else {
+    window.addEventListener("load", function () {
+      setTimeout(postTimeline, 300);
+    });
+  }
+})();
+</script>
+</body>
+</html>
